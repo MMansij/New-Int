@@ -44,3 +44,4 @@ access.txt
 infra/terraform.tfstate
 infra/terraform.tfstate.backup
 test-kms.js
+infra/.terraform/
