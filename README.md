@@ -1,36 +1,144 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📄 Intelliparse
 
-## Getting Started
+**Intelliparse** is a smart document parsing and voice playback application built with **Next.js 14**, **TypeScript**, and AWS services.  
+It allows users to upload documents, extracts structured data and summaries from them, and provides a text-to-speech option to listen to parsed results.  
 
-First, run the development server:
+---
+
+## 🚀 Features
+
+- 🌌 **Parallax UI**: Smooth, modern frontend with `react-scroll-parallax`.  
+- 📤 **Document Upload**: Form to upload PDFs/images along with user details.  
+- 🤖 **Backend Parsing**: Calls `/api/submit` route to process uploaded documents via AWS services (Textract, Bedrock, etc.).  
+- 🧾 **Structured Results**: Extracted **key-value data** and **document type** are displayed in a responsive UI.  
+- 🔊 **Voice Playback**: Summaries can be read aloud using browser `SpeechSynthesis`.  
+- ☁️ **Infrastructure-as-Code**: Terraform configs (`main.tf`, `outputs.tf`) for provisioning AWS resources.  
+- ✅ **Testing**: Jest + React Testing Library setup with code coverage.  
+
+---
+
+## 🛠 Tech Stack
+
+- **Frontend**: Next.js 14, TypeScript, Bootstrap, React Scroll Parallax  
+- **Backend**: Next.js API routes (`/api/submit`), Axios  
+- **Cloud**: AWS (Textract, Bedrock, S3, Polly, KMS)  
+- **IaC**: Terraform  
+- **Testing**: Jest, @testing-library/react, @testing-library/jest-dom  
+
+---
+
+## 📂 Project Structure
+
+```
+src/
+ ├── app/
+ │   ├── page.tsx            # Main Intelliparse UI
+ │   ├── layout.tsx          # Root layout
+ │   └── api/submit/route.ts # API route handling uploads
+ ├── lib/                    # AWS service clients & helpers
+ │   ├── s3.ts
+ │   ├── textract.ts
+ │   ├── polly.ts
+ │   ├── bedrock.ts
+ │   ├── kms.ts
+ │   └── awsClientOptions.ts
+ └── __tests__/              # Jest test suites
+terraform/
+ ├── main.tf                 # AWS resources
+ └── outputs.tf
+```
+
+---
+
+## ⚙️ Setup
+
+1. **Clone repo**
+
+```bash
+git clone https://github.com/<your-org>/intelliparse.git
+cd intelliparse
+```
+
+2. **Install dependencies**
+
+```bash
+npm install
+```
+
+3. **Environment variables**
+
+Create a `.env.local` file with your AWS credentials and configs:
+
+```env
+AWS_ACCESS_KEY_ID=your-key
+AWS_SECRET_ACCESS_KEY=your-secret
+AWS_REGION=us-east-1
+UPLOAD_BUCKET=intelliparse-bucket
+BEDROCK_MODEL_ID=anthropic.claude-v2
+```
+
+*(For tests, you can use `setupAwsEnv.ts` with dummy values.)*
+
+4. **Run locally**
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🧪 Running Tests
 
-## Learn More
+```bash
+npm test -- --coverage
+```
 
-To learn more about Next.js, take a look at the following resources:
+- Uses **Jest** + **React Testing Library**  
+- Coverage report will show % tested per file.  
+- Mocked AWS environment is set up in `setupAwsEnv.ts`.  
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## ☁️ Deploying with Terraform
 
-## Deploy on Vercel
+1. Configure your AWS CLI:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+aws configure
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. Deploy resources:
+
+```bash
+cd terraform
+terraform init
+terraform apply
+```
+
+---
+
+## 📊 Example Workflow
+
+1. User uploads an invoice PDF + fills out form.  
+2. API `/api/submit` sends file to S3.  
+3. AWS Textract extracts key-value pairs.  
+4. AWS Bedrock generates a summary.  
+5. AWS Polly (or browser TTS) reads it aloud.  
+6. Parsed result and summary are shown on frontend.  
+
+---
+
+## 📌 Roadmap
+
+- [ ] Improve test coverage for AWS service clients  
+- [ ] Add multi-language TTS support  
+- [ ] Enhance error handling and retries  
+- [ ] Deploy frontend with Vercel and backend infra with AWS  
+
+---
+
+## 📜 License
+
+MIT © 2025
