@@ -1,3 +1,15 @@
+// add at very top
+import 'server-only'
+export const runtime = 'nodejs'
+
+// ensure shared config/profiles are read
+if (!process.env.AWS_SDK_LOAD_CONFIG) process.env.AWS_SDK_LOAD_CONFIG = '1'
+
+// prevent dirty env creds from overriding your profile
+for (const k of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']) {
+  if (process.env[k]) delete process.env[k as keyof NodeJS.ProcessEnv]
+}
+
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadToS3 } from '@/lib/s3'
 import { runTextract } from '@/lib/textract'

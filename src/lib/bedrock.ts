@@ -1,77 +1,67 @@
+// src/lib/bedrock.ts
+import 'server-only'
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 
-const bedrock = new BedrockRuntimeClient({ region: 'us-east-1' })
-
-export async function runClaudeHaiku(ocrText: string) {
-  const prompt = `
-You are an intelligent document parser. Given OCR output from any scanned document (such as a driver's license, ID card, passport, transcript, or utility bill), do the following:
-
-1. Identify the document type from the text.
-2. Extract all clearly labeled or obvious fields as key-value pairs (like "Name", "DOB", "Address", "ID Number", etc).
-3. Generate a clear, spoken-style summary of the document's key information.
-4. Return only a JSON object using the following schema:
-
-{
-  "document_type": "<inferred document type>",
-  "key_value_data": {
-    "Field 1": "Value 1",
-    "Field 2": "Value 2"
-  },
-  "spoken_summary": "<a one-paragraph human-readable summary>"
+function need(name: string) {
+  const v = process.env[name]
+  if (!v) throw new Error(`Missing ${name} in .env.local`)
+  const cleaned = v.replace(/[\r\n]/g, '').trim()
+  if (!cleaned) throw new Error(`${name} is empty after cleaning`)
+  return cleaned
 }
 
-Notes:
-- Include only fields that are clearly present and confidently labeled.
-- Skip unclear or redundant values.
-- Be robust to layout issues or spacing problems.
-- Respond only with JSON — no explanations, markdown, or commentary.
+const region = process.env.AWS_REGION || 'us-east-1'
+const accessKeyId = need('AWS_ACCESS_KEY_ID')
+const secretAccessKey = need('AWS_SECRET_ACCESS_KEY')
+const MODEL_ID = need('BEDROCK_MODEL_ID')
 
-Here is the OCR text:
+let _br: BedrockRuntimeClient | null = null
+function bedrock() {
+  if (_br) return _br
+  _br = new BedrockRuntimeClient({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  })
+  return _br
+}
 
-"""${ocrText}"""
-  `
-
-  const input = {
-    modelId: 'anthropic.claude-3-haiku-20240307-v1:0',
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify({
-      anthropic_version: 'bedrock-2023-05-31',
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 1024,
-    }),
+export async function runClaudeHaiku(rawOCRText: string) {
+  const payload = {
+    anthropic_version: 'bedrock-2023-05-31',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              `You are an expert document parsing assistant.\n` +
+              `1) Identify document type.\n` +
+              `2) Return key-value data JSON.\n` +
+              `3) Provide a short spoken summary.\n\n` +
+              `Return: {"document_type": "...", "key_value_data": {...}, "spoken_summary": "..."}` +
+              `\n\nOCR:\n${rawOCRText}`,
+          },
+        ],
+      },
+    ],
+    max_tokens: 1000,
   }
 
-  const command = new InvokeModelCommand(input)
-  const response = await bedrock.send(command)
-  const rawBody = await response.body.transformToString()
+  const res = await bedrock().send(new InvokeModelCommand({
+    modelId: MODEL_ID,
+    body: JSON.stringify(payload),
+    contentType: 'application/json',
+    accept: 'application/json',
+  }))
 
+  const raw = new TextDecoder().decode(res.body as Uint8Array)
+  const base = JSON.parse(raw)
+  const textBlock = base?.content?.[0]?.text ?? '{}'
+  const clean = textBlock.replace(/[\u0000-\u001F]+/g, '')
   try {
-    const parsed = JSON.parse(rawBody)
-    const content = parsed?.content?.[0]?.text || '{}'
-
-    const jsonStart = content.indexOf('{')
-    const jsonEnd = content.lastIndexOf('}')
-    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON found')
-
-    const jsonString = content.slice(jsonStart, jsonEnd + 1)
-      .replace(/,\s*}/g, '}') // remove trailing commas
-      .replace(/,\s*]/g, ']') // remove trailing commas
-      .replace(/[\u0000-\u001F]+/g, '') // strip control characters
-
-    return JSON.parse(jsonString)
-  } catch (err) {
-    console.error('❌ Error parsing Claude response:', err)
-    console.log('🪵 Raw Claude body:', rawBody)
-    return {
-      document_type: 'Unknown',
-      key_value_data: {},
-      spoken_summary: 'No summary found.',
-    }
+    return JSON.parse(clean)
+  } catch {
+    return { document_type: 'Unknown', key_value_data: {}, spoken_summary: 'No summary found.' }
   }
 }
