@@ -27,12 +27,12 @@ flowchart LR
   linkStyle default stroke-width:1.3px
 
   subgraph Client["Client (Browser)"]
-    UI[Next.js Page<br/>(Upload Form + Result + Speech)]
+    UI[Next.js Page\n(Upload Form, Result, Speech)]
   end
   class UI client
 
   subgraph App["Next.js App Server"]
-    API["/api/submit<br/>(route.ts)"]
+    API["/api/submit\n(route.ts)"]
     S3Lib["lib/s3.ts"]
     Tex["lib/textract.ts"]
     Bed["lib/bedrock.ts"]
@@ -41,30 +41,30 @@ flowchart LR
   class API,S3Lib,Tex,Bed,Pol server
 
   subgraph AWS["AWS Services"]
-    S3[(Amazon S3\\ns3://bucket/key)]
+    S3[(Amazon S3\ns3://bucket/key)]
     TX[Amazon Textract]
-    BR[Bedrock\\nClaude Haiku]
+    BR[Bedrock\nClaude Haiku]
     PL[Amazon Polly]
   end
   class S3,TX,BR,PL aws
 
-  UI -- "multipart/form-data (file)" --> API
+  UI -->|multipart/form-data (file)| API
   API --> S3Lib
-  S3Lib -- "PUT object" --> S3
+  S3Lib -->|PUT object| S3
   API --> Tex
-  Tex -- "StartDocumentTextDetection" --> TX
-  TX -- "JobId" --> Tex
-  Tex -. "poll GetDocumentTextDetection" .-> TX
-  TX -. "Blocks (LINE…)" .-> Tex
-  Tex -- "OCR text" --> Bed
-  Bed -- "InvokeModel (messages)" --> BR
-  BR -- "JSON string in text block" --> Bed
-  Bed -- "parsed {document_type, key_value_data, spoken_summary}" --> API
+  Tex -->|StartDocumentTextDetection| TX
+  TX -->|JobId| Tex
+  Tex -.->|poll GetDocumentTextDetection| TX
+  TX -.->|Blocks (LINE…)| Tex
+  Tex -->|OCR text| Bed
+  Bed -->|InvokeModel (messages)| BR
+  BR -->|JSON text block| Bed
+  Bed -->|{document_type, key_value_data, spoken_summary}| API
   API --> Pol
-  Pol -- "SynthesizeSpeech" --> PL
-  PL -- "audio bytes" --> Pol
-  Pol -- "audio_base64" --> API
-  API -- "JSON + audio_base64" --> UI
+  Pol -->|SynthesizeSpeech| PL
+  PL -->|audio bytes| Pol
+  Pol -->|audio_base64| API
+  API -->|JSON + audio_base64| UI
 ```
 
 ### Request Flow
@@ -93,7 +93,7 @@ sequenceDiagram
   end
 
   API->>BR: InvokeModel(messages: OCR text)
-  BR-->>API: { content: [{ text: "…JSON…" }] }
+  BR-->>API: { content: [{ text: "...JSON..." }] }
 
   API->>PL: SynthesizeSpeech(summary)
   PL-->>API: MP3 bytes
