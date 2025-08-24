@@ -26,18 +26,19 @@ Intelliparse is a Next.js application that lets users upload documents (image/PD
 ### Component view
 
 ```mermaid
+
 flowchart LR
   classDef client fill:#e3f2fd,stroke:#1976d2,color:#0d47a1,stroke-width:1.5px
   classDef server fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20,stroke-width:1.5px
   classDef aws fill:#fff3e0,stroke:#ef6c00,color:#e65100,stroke-width:1.5px
 
   subgraph Client["Client (Browser)"]
-    UI[Next.js Page\n(Upload Form, Result, Speech)]
+    UI["Next.js Page<br/>(Upload Form, Result, Speech)"]
   end
   class UI client
 
   subgraph App["Next.js App Server"]
-    API["/api/submit\n(route.ts)"]
+    API["/api/submit<br/>(route.ts)"]
     S3Lib["lib/s3.ts"]
     Tex["lib/textract.ts"]
     Bed["lib/bedrock.ts"]
@@ -46,30 +47,31 @@ flowchart LR
   class API,S3Lib,Tex,Bed,Pol server
 
   subgraph AWS["AWS Services"]
-    S3[(Amazon S3\ns3://bucket/key)]
-    TX[Amazon Textract]
-    BR[Bedrock\nClaude]
-    PL[Amazon Polly]
+    S3["Amazon S3<br/>s3://bucket/key"]
+    TX["Amazon Textract"]
+    BR["Bedrock<br/>Claude"]
+    PL["Amazon Polly"]
   end
   class S3,TX,BR,PL aws
 
-  UI -->|multipart/form-data (file)| API
+  UI -->|"multipart/form-data (file)"| API
   API --> S3Lib
-  S3Lib -->|Put object| S3
+  S3Lib -->|"Put object"| S3
   API --> Tex
-  Tex -->|StartDocumentTextDetection| TX
-  TX -->|JobId| Tex
-  Tex -.->|poll GetDocumentTextDetection| TX
-  TX -.->|Blocks (LINE)| Tex
-  Tex -->|OCR text| Bed
-  Bed -->|InvokeModel| BR
-  BR -->|JSON text block| Bed
-  Bed -->|parsed \{document_type, key_value_data, spoken_summary\}| API
+  Tex -->|"StartDocumentTextDetection"| TX
+  TX -->|"JobId"| Tex
+  Tex -.->|"poll GetDocumentTextDetection"| TX
+  TX -.->|"Blocks (LINE)"| Tex
+  Tex -->|"OCR text"| Bed
+  Bed -->|"InvokeModel"| BR
+  BR -->|"JSON text block"| Bed
+  Bed -->|"parsed \{document_type, key_value_data, spoken_summary\}"| API
   API --> Pol
-  Pol -->|SynthesizeSpeech| PL
-  PL -->|audio bytes| Pol
-  Pol -->|audio_base64| API
-  API -->|JSON + audio_base64| UI
+  Pol -->|"SynthesizeSpeech"| PL
+  PL -->|"audio bytes"| Pol
+  Pol -->|"audio_base64"| API
+  API -->|"JSON + audio_base64"| UI
+
 
 ```
 
