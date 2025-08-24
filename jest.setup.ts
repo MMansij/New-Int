@@ -1,109 +1,143 @@
 // jest.setup.ts
-
 import '@testing-library/jest-dom'
+import { TextEncoder, TextDecoder } from 'util'
 
-/**
- * matchMedia — used by various libs and CSS breakpoints
- */
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: jest.fn().mockImplementation((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: jest.fn(), // deprecated
-    removeListener: jest.fn(), // deprecated
-    addEventListener: jest.fn(),
-    removeEventListener: jest.fn(),
-    dispatchEvent: jest.fn(),
-  })),
-})
+// ---------- Polyfills available in Node + jsdom ----------
+;(globalThis as any).TextEncoder ||= TextEncoder
+;(globalThis as any).TextDecoder ||= TextDecoder
 
-/**
- * ResizeObserver — required by react-scroll-parallax and others
- */
-class ResizeObserverMock {
-  observe = jest.fn()
-  unobserve = jest.fn()
-  disconnect = jest.fn()
-}
-;(window as any).ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
-
-/**
- * IntersectionObserver — sometimes used by images/lazy components
- */
-class IntersectionObserverMock {
-  observe = jest.fn()
-  unobserve = jest.fn()
-  disconnect = jest.fn()
-  takeRecords = jest.fn(() => [])
-}
-;(window as any).IntersectionObserver =
-  IntersectionObserverMock as unknown as typeof IntersectionObserver
-
-/**
- * Web Speech API — mock both speechSynthesis and SpeechSynthesisUtterance
- * so components can call read/stop without JSDOM crashing.
- */
+// Exported mocks (used by some tests)
 export const speechSynthesisSpeakMock = jest.fn()
 export const speechSynthesisCancelMock = jest.fn()
 
-Object.defineProperty(window, 'speechSynthesis', {
-  writable: true,
-  value: {
-    speak: speechSynthesisSpeakMock,
-    cancel: speechSynthesisCancelMock,
-    speaking: false,
-    // add any other methods if your code uses them
-    getVoices: jest.fn(() => []),
-    pause: jest.fn(),
-    resume: jest.fn(),
-    onvoiceschanged: null,
-  },
-})
+// Detect environment
+const isJsdom =
+  typeof window !== 'undefined' &&
+  typeof document !== 'undefined' &&
+  !!(window as any).document?.createElement
 
-class SpeechSynthesisUtteranceMock {
-  text: string
-  constructor(text: string) {
-    this.text = text
+if (isJsdom) {
+  // -------- Browser-only (jsdom) mocks --------
+
+  // matchMedia
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: jest.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: jest.fn(), // deprecated
+      removeListener: jest.fn(), // deprecated
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    })),
+  })
+
+  // ResizeObserver
+  class ResizeObserverMock {
+    observe = jest.fn()
+    unobserve = jest.fn()
+    disconnect = jest.fn()
+    takeRecords = jest.fn(() => [])
   }
-  // Properties/methods you might reference
-  lang?: string
-  rate?: number
-  pitch?: number
-  volume?: number
-  voice?: SpeechSynthesisVoice
-  onend?: (e: unknown) => void
-  onerror?: (e: unknown) => void
+  Object.defineProperty(window as any, 'ResizeObserver', {
+    writable: true,
+    value: ResizeObserverMock as any,
+  })
+
+  // IntersectionObserver
+  class IntersectionObserverMock {
+    observe = jest.fn()
+    unobserve = jest.fn()
+    disconnect = jest.fn()
+    takeRecords = jest.fn(() => [])
+  }
+  Object.defineProperty(window as any, 'IntersectionObserver', {
+    writable: true,
+    value: IntersectionObserverMock as any,
+  })
+
+  // Web Speech API
+  Object.defineProperty(window, 'speechSynthesis', {
+    writable: true,
+    value: {
+      speak: speechSynthesisSpeakMock,
+      cancel: speechSynthesisCancelMock,
+      speaking: false,
+      getVoices: jest.fn(() => []),
+      pause: jest.fn(),
+      resume: jest.fn(),
+      onvoiceschanged: null,
+    },
+  })
+
+  class SpeechSynthesisUtteranceMock {
+    text: string
+    constructor(text: string) { this.text = text }
+    lang?: string
+    rate?: number
+    pitch?: number
+    volume?: number
+    voice?: any
+    onend?: (e: unknown) => void
+    onerror?: (e: unknown) => void
+  }
+  Object.defineProperty(window as any, 'SpeechSynthesisUtterance', {
+    writable: true,
+    value: SpeechSynthesisUtteranceMock as any,
+  })
+
+  // URL.createObjectURL / revokeObjectURL
+  if (!(window.URL as any).createObjectURL) {
+    ;(window.URL as any).createObjectURL = jest.fn(() => 'blob:jest-mock')
+    ;(window.URL as any).revokeObjectURL = jest.fn()
+  }
+
+  // scrollTo
+  Object.defineProperty(window, 'scrollTo', {
+    writable: true,
+    value: jest.fn(),
+  })
+} else {
+  // -------- Node-only (server tests) polyfills --------
+
+  // Minimal Blob polyfill (Node 18 has Blob, but keep fallback)
+  ;(globalThis as any).Blob ||= class Blob {
+    private _buf: Uint8Array
+    type?: string
+    constructor(bits?: any[], opts?: any) {
+      const chunks = (bits || []).map((b) =>
+        typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)
+      )
+      const size = chunks.reduce((s, c) => s + c.length, 0)
+      this._buf = new Uint8Array(size)
+      let off = 0
+      for (const c of chunks) { this._buf.set(c, off); off += c.length }
+      this.type = opts?.type
+    }
+    async arrayBuffer() { return this._buf.buffer }
+  }
+
+  // File polyfill (Node <20)
+  ;(globalThis as any).File ||= class File extends (globalThis as any).Blob {
+    name: string; lastModified: number
+    constructor(bits: any[], name: string, opts: any = {}) {
+      super(bits, opts)
+      this.name = name
+      this.lastModified = opts.lastModified || Date.now()
+    }
+  }
 }
-;(window as any).SpeechSynthesisUtterance =
-  SpeechSynthesisUtteranceMock as unknown as typeof SpeechSynthesisUtterance
 
-/**
- * URL.createObjectURL — useful when tests touch file inputs
- */
-if (!(window.URL as any).createObjectURL) {
-  ;(window.URL as any).createObjectURL = jest.fn(() => 'blob:jest-mock')
-  ;(window.URL as any).revokeObjectURL = jest.fn()
-}
-
-/**
- * scrollTo — noop to prevent errors when components call it
- */
-window.scrollTo = jest.fn()
-
-/**
- * (Optional) Silence noisy Parallax warning in tests
- * Comment this block out if you prefer to see all warnings.
- */
+// ---------- (Optional) Silence noisy Parallax warning in tests ----------
 const originalWarn = console.warn
-console.warn = (...args: unknown[]) => {
+console.warn = (...args: any[]) => {
   if (
     typeof args[0] === 'string' &&
     args[0].includes('Failed to create the resize observer in the ParallaxContoller')
   ) {
-    return // suppress this specific warning
+    return
   }
-  // @ts-expect-error spread types are fine for console
   originalWarn(...args)
 }

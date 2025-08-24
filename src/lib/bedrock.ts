@@ -1,6 +1,7 @@
 // src/lib/bedrock.ts
 import 'server-only'
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
+import { TextDecoder } from 'util'
 
 function need(name: string) {
   const v = process.env[name]

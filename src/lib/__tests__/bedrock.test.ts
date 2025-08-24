@@ -1,82 +1,135 @@
 // src/lib/__tests__/bedrock.test.ts
 
-// 1) Mock AWS Bedrock Runtime SDK (v3)
-jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
-  BedrockRuntimeClient: jest.fn().mockImplementation(() => ({ send: jest.fn() })),
-  InvokeModelCommand: jest.fn().mockImplementation((input) => ({ input })),
-}))
+// Mock the exact client/command used by the module
+let sendMock: jest.Mock
+jest.mock('@aws-sdk/client-bedrock-runtime', () => {
+  sendMock = jest.fn()
+  class BedrockRuntimeClient {
+    send(...args: any[]) {
+      return sendMock(...args)
+    }
+  }
+  class InvokeModelCommand {
+    constructor(public input: any) {}
+  }
+  return { BedrockRuntimeClient, InvokeModelCommand, __m: { sendMock } }
+})
 
-import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime'
+// Use your helper that provides AWS creds (and add MODEL_ID here)
 import { setAwsEnv } from '../../test/setupAwsEnv'
 
-describe('bedrock', () => {
+describe('lib/bedrock.runClaudeHaiku', () => {
+  const origEnv = { ...process.env }
+
   beforeEach(() => {
-    setAwsEnv()
+    jest.resetModules()
     jest.clearAllMocks()
+    process.env = { ...origEnv }
+    setAwsEnv()
+    process.env.BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'model-test-id'
+    // reset shared mock
+    const sdk = require('@aws-sdk/client-bedrock-runtime')
+    sdk.__m.sendMock.mockReset()
   })
 
-  test('summarize calls model and returns string', async () => {
-    // Fake Bedrock response payload your code will parse
-    const payload = JSON.stringify({ output_text: 'TL;DR: Hello summary!' })
+  test('calls Bedrock and returns parsed JSON object from text block', async () => {
+    const sdk = require('@aws-sdk/client-bedrock-runtime')
 
-    // Create a body that supports .arrayBuffer()
-    const bodyLike = {
-      arrayBuffer: async () => Buffer.from(payload, 'utf8'),
+    // Bedrock Messages API–style response
+    const returned = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            document_type: 'Invoice',
+            key_value_data: { Amount: '$123.45', Date: '2025-01-01' },
+            spoken_summary: 'Invoice summary.',
+          }),
+        },
+      ],
     }
 
-    // Stub client.send to return both `body` and `Body` variants
-    const fakeSend = jest.fn().mockResolvedValue({
-      body: bodyLike as any,
-      Body: bodyLike as any,
+    // Encode response body as Uint8Array/Buffer (what TextDecoder expects)
+    const bodyBytes = Buffer.from(JSON.stringify(returned), 'utf8')
+    sdk.__m.sendMock.mockResolvedValueOnce({
+      body: bodyBytes,
       contentType: 'application/json',
     })
-    ;(BedrockRuntimeClient as unknown as jest.Mock).mockImplementation(() => ({
-      send: fakeSend,
-    }))
 
-    // Import after mocks/env are ready
-    const mod = await import('../bedrock')
+    const { runClaudeHaiku } = await import('../bedrock')
+    const result = await runClaudeHaiku('OCR text here')
 
-    // Be flexible about the export name
-    const summarizeFn =
-      (mod as any).summarize ||
-      (mod as any).generateSummary ||
-      (mod as any).default
+    // Shape + fields
+    expect(result).toEqual({
+      document_type: 'Invoice',
+      key_value_data: { Amount: '$123.45', Date: '2025-01-01' },
+      spoken_summary: 'Invoice summary.',
+    })
 
-    expect(typeof summarizeFn).toBe('function')
-
-    const input = 'Please summarize this text.'
-    const out = await summarizeFn(input)
-
-    // Assert: client was invoked
-    expect(fakeSend).toHaveBeenCalledTimes(1)
-    const firstCallArg = fakeSend.mock.calls[0][0]
-    expect(firstCallArg).toHaveProperty('input')
-    // The request should include model + some body
-    expect(firstCallArg.input).toEqual(
+    // Ensure command was constructed with our modelId and body
+    const firstArg = sdk.__m.sendMock.mock.calls[0][0]
+    expect(firstArg).toBeInstanceOf(require('@aws-sdk/client-bedrock-runtime').InvokeModelCommand)
+    expect(firstArg.input).toEqual(
       expect.objectContaining({
-        modelId: expect.any(String),
+        modelId: process.env.BEDROCK_MODEL_ID,
+        contentType: 'application/json',
+        accept: 'application/json',
       })
     )
+    // Payload sanity
+    expect(typeof firstArg.input.body).toBe('string')
+    expect(JSON.parse(firstArg.input.body)).toHaveProperty('messages')
+  })
 
-    // Assert: return is a string (ideally what we mocked)
-    expect(typeof out).toBe('string')
-    // If your code returns the text we mocked:
-    // expect(out).toContain('TL;DR: Hello summary!')
+  test('strips control characters and still parses JSON', async () => {
+    const sdk = require('@aws-sdk/client-bedrock-runtime')
+
+    // Put control chars (\u0001) around JSON to hit the .replace(/[\u0000-\u001F]+/g,'')
+    const noisyText =
+      '\u0001\u0001' +
+      JSON.stringify({
+        document_type: 'Receipt',
+        key_value_data: { Total: '$9.99' },
+        spoken_summary: 'Clean summary.',
+      }) +
+      '\u0001'
+
+    const returned = { content: [{ type: 'text', text: noisyText }] }
+    const bodyBytes = Buffer.from(JSON.stringify(returned), 'utf8')
+
+    sdk.__m.sendMock.mockResolvedValueOnce({ body: bodyBytes, contentType: 'application/json' })
+
+    const { runClaudeHaiku } = await import('../bedrock')
+    const result = await runClaudeHaiku('OCR text here')
+    expect(result).toEqual({
+      document_type: 'Receipt',
+      key_value_data: { Total: '$9.99' },
+      spoken_summary: 'Clean summary.',
+    })
+  })
+
+  test('returns fallback object when text is invalid JSON', async () => {
+    const sdk = require('@aws-sdk/client-bedrock-runtime')
+
+    const returned = { content: [{ type: 'text', text: 'not-json!!' }] }
+    const bodyBytes = Buffer.from(JSON.stringify(returned), 'utf8')
+    sdk.__m.sendMock.mockResolvedValueOnce({ body: bodyBytes, contentType: 'application/json' })
+
+    const { runClaudeHaiku } = await import('../bedrock')
+    const result = await runClaudeHaiku('OCR text here')
+    expect(result).toEqual({
+      document_type: 'Unknown',
+      key_value_data: {},
+      spoken_summary: 'No summary found.',
+    })
   })
 
   test('propagates Bedrock errors', async () => {
-    const fakeSend = jest.fn().mockRejectedValue(new Error('bedrock boom'))
-    ;(BedrockRuntimeClient as unknown as jest.Mock).mockImplementation(() => ({
-      send: fakeSend,
-    }))
+    const sdk = require('@aws-sdk/client-bedrock-runtime')
+    sdk.__m.sendMock.mockRejectedValueOnce(new Error('bedrock boom'))
 
-    const mod = await import('../bedrock')
-    const summarizeFn =
-      (mod as any).summarize ||
-      (mod as any).generateSummary ||
-      (mod as any).default
-
-    await expect(summarizeFn('x')).rejects.toThrow('bedrock boom')
+    const { runClaudeHaiku } = await import('../bedrock')
+    await expect(runClaudeHaiku('x')).rejects.toThrow('bedrock boom')
+    expect(sdk.__m.sendMock).toHaveBeenCalledTimes(1)
   })
 })

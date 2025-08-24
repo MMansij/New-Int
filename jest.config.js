@@ -43,6 +43,7 @@ const customJestConfig = {
   coverageProvider: 'v8',
   collectCoverageFrom: [
     'src/**/*.{ts,tsx,js,jsx}',
+    'src/app/api/submit/*.{ts,tsx,js,jsx}',
     '!src/**/__tests__/**/*',
     '!**/*.d.ts',
     '!**/node_modules/**',
@@ -57,8 +58,6 @@ const customJestConfig = {
   coverageReporters: ['text', 'lcov', 'html'],
 
   // Jest will use Next’s Babel preset via next/jest, so no manual "transform" needed.
-  // If you have ESM-only deps that need transpile, you can tweak transformIgnorePatterns here.
 }
 
-// createJestConfig lets you async load Next config (.env, next.config.js)
 module.exports = createJestConfig(customJestConfig)

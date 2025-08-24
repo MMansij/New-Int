@@ -10,7 +10,6 @@ describe('Intelliparse Page', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    // Silence the payload logs during tests
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {})
   })
 
@@ -26,7 +25,7 @@ describe('Intelliparse Page', () => {
 
   test('renders form fields', () => {
     render(<Intelliparse />)
-    // These pass once labels are associated with inputs via htmlFor/id in page.tsx
+    // Now that labels are associated with inputs via htmlFor/id these should pass
     expect(screen.getByLabelText(/firstName/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Upload File/i)).toBeInTheDocument()
   })
@@ -48,13 +47,12 @@ describe('Intelliparse Page', () => {
     })
 
     render(<Intelliparse />)
-
     fireEvent.click(screen.getByText(/Submit/i))
 
-    // ⛔️ Removed the flaky "Processing..." assertion
-    // ✅ Assert the final rendered state instead
+    // Assert the final rendered state
     await waitFor(() => {
-      expect(screen.getByText(/Invoice/i)).toBeInTheDocument()
+      // 'Invoice' appears in multiple places (type + summary). Accept multiples.
+      expect(screen.getAllByText(/Invoice/i).length).toBeGreaterThan(0)
       expect(screen.getByText(/Amount/i)).toBeInTheDocument()
       expect(screen.getByText(/Invoice summary here/i)).toBeInTheDocument()
     })
