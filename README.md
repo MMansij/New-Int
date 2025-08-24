@@ -64,12 +64,13 @@ flowchart LR
   Tex -->|OCR text| Bed
   Bed -->|InvokeModel| BR
   BR -->|JSON text block| Bed
-  Bed -->|parsed {document_type, key_value_data, spoken_summary}| API
+  Bed -->|parsed \{document_type, key_value_data, spoken_summary\}| API
   API --> Pol
   Pol -->|SynthesizeSpeech| PL
   PL -->|audio bytes| Pol
   Pol -->|audio_base64| API
   API -->|JSON + audio_base64| UI
+
 ```
 
 ### Request flow
